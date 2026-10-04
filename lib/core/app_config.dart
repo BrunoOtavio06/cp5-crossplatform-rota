@@ -6,12 +6,12 @@
 class AppConfig {
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: '',
+    defaultValue: 'https://puwbluvlckpnzccdzdhi.supabase.co',
   );
 
   static const supabasePublishableKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'sb_publishable_SznLxpqFupQ81auLjMAgxQ_ed8JnqoG',
+    defaultValue: 'sb_publishable_uJ77OkBuGADINJtY_8nkaw_Smh7kCro',
   );
 
   static bool get hasSupabase => supabaseUrl.trim().isNotEmpty;
