@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/app_theme.dart';
-import 'data/rota_store.dart';
+import 'core/auth_service.dart';
 import 'screens/splash_screen.dart';
 import 'widgets/phone_shell.dart';
 
@@ -16,15 +16,17 @@ Future<void> main() async {
       statusBarIconBrightness: Brightness.light,
     ),
   );
-  final store = RotaStore();
-  await store.bootstrap();
-  runApp(RotaApp(store: store));
+
+  final auth = AuthService();
+  await auth.restoreSession();
+
+  runApp(RotaApp(auth: auth));
 }
 
 class RotaApp extends StatelessWidget {
-  const RotaApp({super.key, required this.store});
+  const RotaApp({super.key, required this.auth});
 
-  final RotaStore store;
+  final AuthService auth;
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +34,9 @@ class RotaApp extends StatelessWidget {
       title: 'ROTA',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
-      builder: (context, child) => PhoneShell(child: child ?? const SizedBox.shrink()),
-      home: SplashScreen(store: store),
+      builder: (context, child) =>
+          PhoneShell(child: child ?? const SizedBox.shrink()),
+      home: SplashScreen(auth: auth),
     );
   }
 }

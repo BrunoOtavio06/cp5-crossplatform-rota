@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/app_config.dart';
+import '../core/auth_service.dart';
 import 'load_calculator.dart';
 import 'mock/mock_data.dart';
 import 'models/enums.dart';
@@ -15,13 +16,19 @@ class RotaStore extends ChangeNotifier {
   RotaStore({
     LocalDeliveryRepository? local,
     DeliveryRepository? remote,
+    AuthService? auth,
     DateTime Function()? clock,
   })  : _local = local ?? LocalDeliveryRepository(),
-        _remote = remote ?? (AppConfig.hasSupabase ? SupabaseDeliveryRepository() : null),
+        _auth = auth,
+        _remote = remote ??
+            ((AppConfig.hasSupabase && auth != null)
+                ? SupabaseDeliveryRepository(auth: auth)
+                : null),
         _clock = clock ?? (() => AppConfig.demoToday);
 
   final LocalDeliveryRepository _local;
   final DeliveryRepository? _remote;
+  final AuthService? _auth;
   final DateTime Function() _clock;
 
   bool loading = true;
@@ -29,7 +36,30 @@ class RotaStore extends ChangeNotifier {
   DataSource source = DataSource.local;
   List<Delivery> deliveries = const [];
 
-  Student get student => MockData.student;
+  AuthService? get auth => _auth;
+
+  Student get student {
+    final email = _auth?.email;
+    if (email == null || email.isEmpty) return MockData.student;
+
+    final name = email.split('@').first.replaceAll(RegExp(r'[._-]+'), ' ');
+    final words = name
+        .split(' ')
+        .where((word) => word.trim().isNotEmpty)
+        .map(
+          (word) =>
+              '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+        )
+        .toList();
+
+    return Student(
+      name: words.isEmpty ? MockData.student.name : words.join(' '),
+      course: MockData.student.course,
+      rm: MockData.student.rm,
+      institution: MockData.student.institution,
+    );
+  }
+
   DateTime get today => _clock();
 
   List<WeekLoad> get weeks => LoadCalculator.weeksFor(deliveries);
@@ -40,10 +70,13 @@ class RotaStore extends ChangeNotifier {
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
   }
 
-  /// Próximas no sentido do Figma: o que ainda dá tempo, por data.
   List<Delivery> upcoming({int limit = 6}) {
     final future = deliveries
-        .where((item) => item.status == DeliveryStatus.pendente && !item.isOverdue(today))
+        .where(
+          (item) =>
+              item.status == DeliveryStatus.pendente &&
+              !item.isOverdue(today),
+        )
         .toList()
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
     if (future.length <= limit) return future;
@@ -54,13 +87,17 @@ class RotaStore extends ChangeNotifier {
     loading = true;
     error = null;
     notifyListeners();
+
     try {
-      if (_remote != null) {
+      if (_remote != null && _auth?.isAuthenticated == true) {
         var remoteItems = await _remote.fetchAll();
+
+        // Cada conta recebe sua própria cópia inicial de demonstração.
         if (remoteItems.isEmpty) {
           remoteItems = MockData.deliveries();
           await _remote.saveAll(remoteItems);
         }
+
         deliveries = remoteItems;
         source = DataSource.supabase;
         await _local.saveAll(remoteItems);
@@ -113,11 +150,13 @@ class RotaStore extends ChangeNotifier {
   Future<void> _persist() async {
     notifyListeners();
     await _local.saveAll(deliveries);
+
     if (_remote != null && source == DataSource.supabase) {
       try {
         await _remote.saveAll(deliveries);
       } catch (err) {
-        error = 'A edição ficou salva neste aparelho, mas não no Supabase.';
+        error =
+            'A edição ficou salva neste aparelho, mas não no Supabase.';
         debugPrint('ROTA persist remote: $err');
         notifyListeners();
       }
